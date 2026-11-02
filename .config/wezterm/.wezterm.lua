@@ -3,6 +3,36 @@ local act = wezterm.action
 
 local config = wezterm.config_builder()
 
+-- Window placement and sizing
+local WINDOW_BUFFER = 150
+
+local function resize_window_for_active_screen(window)
+  local screen = wezterm.gui.screens().active
+
+  local window_width = math.max(1, screen.width - (WINDOW_BUFFER * 2))
+  local window_height = math.max(1, screen.height - (WINDOW_BUFFER * 2))
+
+  window:set_inner_size(window_width, window_height)
+  window:set_position(
+    screen.x + WINDOW_BUFFER,
+    screen.y + WINDOW_BUFFER - 19.5
+  )
+end
+
+local function resize_when_gui_is_ready(mux_window, attempts_left)
+  local gui_window = mux_window:gui_window()
+  if gui_window then
+    resize_window_for_active_screen(gui_window)
+    return
+  end
+
+  if attempts_left > 0 then
+    wezterm.time.call_after(0.1, function()
+      resize_when_gui_is_ready(mux_window, attempts_left - 1)
+    end)
+  end
+end
+
 -- Helper function for domain switcher
 local function get_domain_choices()
   local choices = {}
@@ -34,11 +64,14 @@ local function select_domain(window, pane)
             return
           end
 
-          wezterm.mux.spawn_window({
+          local _, _, mux_window = wezterm.mux.spawn_window({
             domain = {
               DomainName = id,
             },
           })
+          -- The GUI window may not exist yet. Wait briefly for the GUI client
+          -- to attach so screen dimensions are available before sizing it.
+          resize_when_gui_is_ready(mux_window, 20)
         end
       ),
     }),
@@ -47,7 +80,6 @@ local function select_domain(window, pane)
   )
 end
 
--- Temporary keybinding for switching domains
 config.keys = {
   {
     key = "D",
@@ -69,22 +101,6 @@ config.win32_system_backdrop = "Acrylic"
 config.hide_tab_bar_if_only_one_tab = true
 config.window_decorations = "RESIZE"
 config.default_domain = 'WSL:Ubuntu'
-
--- Window placement and sizing
-local WINDOW_BUFFER = 150
-
-local function resize_window_for_active_screen(window)
-  local screen = wezterm.gui.screens().active
-
-	local window_width = math.max(1, screen.width - (WINDOW_BUFFER * 2))
-	local window_height = math.max(1, screen.height - (WINDOW_BUFFER * 2))
-
-  window:set_inner_size(window_width, window_height)
-	window:set_position(
-		screen.x + WINDOW_BUFFER,
-		screen.y + WINDOW_BUFFER - 19.5
-  )
-end
 
 wezterm.on("gui-startup", function(cmd)
 	local spawn_args = cmd or {}
